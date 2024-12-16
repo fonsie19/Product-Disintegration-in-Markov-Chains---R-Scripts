@@ -1,0 +1,445 @@
+---
+title: "Markov Product Disintegration"
+output: html_document
+---
+
+```{r 0}
+library(ggplot2)
+library(reshape2)
+library(knitr)
+set.seed(0)
+
+statesY <- c("a", "b", "c", "d", "e")
+statesX <- 1:10
+n <- 100000
+
+
+# distributions X|Y
+
+distributionX <- function(mean, sd) {
+  function() {
+  values <- statesX
+  probs <- dnorm(values, mean = mean, sd = sd)
+  probs <- pmax(probs, 0)  # Ensure no negative probabilities
+  sample(values, size = 1, prob = probs)
+}
+}
+
+distribution_a <- distributionX(1.5, 0.7)
+distribution_b <- distributionX(3.5, 0.7)
+distribution_c <- distributionX(5.5, 0.7)
+distribution_d <- distributionX(7.5, 0.7)
+distribution_e <- distributionX(9.5, 0.7)
+
+map <- list(a = distribution_a, b = distribution_b, c = distribution_c, d = distribution_d, e = distribution_e)
+
+
+#heatmap functions
+
+heatmapY <- function(Y, label = "𝜉") {
+# Empirical distribution for Y
+Y_counts <- table(factor(Y, levels = statesY))
+Y_df <- data.frame(State = names(Y_counts), Count = as.numeric(Y_counts))
+
+# Empirical transition matrix for Y
+Y_transitions <- table(
+  Y_n = factor(Y[-n], levels = statesY),        # Current state Y(n)
+  Y_next = factor(Y[-1], levels = statesY)      # Next state Y(n+1)
+)
+
+# Normalize to get probabilities
+Y_transition_probs <- prop.table(Y_transitions, 1)
+
+# Convert to long format for ggplot2
+Y_transition_df <- as.data.frame(as.table(Y_transition_probs))
+colnames(Y_transition_df) <- c("Y_n", "Y_next", "Probability")
+
+# Plot the heatmap for Y(n) to Y(n+1)
+ggplot(Y_transition_df, aes(x = Y_n, y = Y_next, fill = Probability)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "gray1", high = "gray100", mid = "gray50", midpoint = max(Y_transition_df$Probability) / 2) +
+  theme_minimal() +
+  labs(
+    title = paste("Empirical Transition Probabilities: ", label, "(n) → ", label, "(n+1)"), # Take 𝜉 as a synonym of Y
+    x = paste(label, "(n) (Current State)"),
+    y = paste(label, "(n+1) (Next State)"),
+    fill = "Probability"
+  )
+}
+
+heatmapX <- function(X, Y) {
+# Empirical distribution for X | Y
+X_Y_counts <- table(Y = factor(Y, levels = statesX), X = factor(X, levels = 1:10))
+X_Y_df <- as.data.frame(as.table(X_Y_counts))
+colnames(X_Y_df) <- c("State_Y", "Value_X", "Count")
+
+# Generate the empirical transition matrix for X
+X_transitions <- table(
+  X_n = factor(X[-n], levels = 1:10),        # Current state X(n)
+  X_next = factor(X[-1], levels = 1:10)     # Next state X(n+1)
+)
+
+# Normalize to get probabilities
+X_transition_probs <- prop.table(X_transitions, 1)
+
+# Convert to long format for ggplot2
+X_transition_df <- as.data.frame(as.table(X_transition_probs))
+colnames(X_transition_df) <- c("X_n", "X_next", "Probability")
+
+# Plot the heatmap for X(n) to X(n+1)
+ggplot(X_transition_df, aes(x = X_n, y = X_next, fill = Probability)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "gray1", high = "gray100", mid = "gray50", midpoint = max(X_transition_df$Probability) / 2) +
+  theme_minimal() +
+  labs(
+    title = "Empirical Transition Probabilities: X(n) → X(n+1)",
+    x = "X(n) (Current State)",
+    y = "X(n+1) (Next State)",
+    fill = "Probability"
+  )
+}
+
+heatmapXk <- function(X) {
+# Create the current states for X(n, n-2)
+current_states <- paste(X[-c(1, 2, n)], X[-c(n-2, n-1, n)], sep = ",")  # X(n, n-2)
+next_states <- X[-c(1, 2, 3)]  # X(n+1)
+
+# Create a contingency table (current vs next states)
+transitions <- table(
+  Current = current_states,
+  Next = next_states
+)
+
+# Normalize the transition matrix to get transition probabilities
+transition_probs <- prop.table(transitions, 1)
+
+# Convert to long format for ggplot2
+transition_df <- as.data.frame(as.table(transition_probs))
+colnames(transition_df) <- c("Current_State", "Next_State", "Probability")
+
+# Split and reorder Current_State numerically
+split_states <- do.call(rbind, strsplit(as.character(transition_df$Current_State), ","))  # Split "X,Y" into columns
+numeric_order <- order(as.numeric(split_states[, 1]), as.numeric(split_states[, 2]))  # Sort by both components
+ordered_states <- unique(transition_df$Current_State)[numeric_order]  # Apply the sorted order
+
+# Reassign factor levels in the correct order
+transition_df$Current_State <- factor(transition_df$Current_State, levels = ordered_states)
+
+# Explicitly set the factor levels for Next_State (assuming 1:10 as you mentioned)
+transition_df$Next_State <- factor(transition_df$Next_State, levels = 1:10)  # 1:10 for y-axis
+
+# Plot the heatmap
+ggplot(transition_df, aes(x = Current_State, y = Next_State, fill = Probability)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "gray1", high = "gray100", mid = "gray50", midpoint = max(transition_df$Probability) / 2) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 80, hjust = 1, size = 4),  # Rotate x-axis labels for better readability
+    axis.text.y = element_text(size = 8)  # Adjust y-axis font size if needed
+  ) +
+  labs(
+    title = "Empirical Transition Probabilities: X(n, n-2) → X(n+1)",
+    x = "X(n, n-2) (Current State)",
+    y = "X (Next State)",
+    fill = "Probability"
+  )
+}
+
+
+# markovianity tests
+
+markovtest <- function(X) {
+# First-order transition matrix for X
+X_transitions_first_order <- table(
+  X_n = factor(X[-n], levels = statesX),  # Current state X(n)
+  X_next = factor(X[-1], levels = statesX)  # Next state X(n+1)
+)
+X_transition_probs_first_order <- prop.table(X_transitions_first_order, 1)
+
+# For third-order, we need to shift the indices correctly
+X_transitions_third_order <- table(
+  X_n1 = factor(X[1:(n-3)], levels = statesX),    # Current state X(n-3)
+  X_n2 = factor(X[2:(n-2)], levels = statesX),    # Previous state X(n-2)
+  X_n3 = factor(X[3:(n-1)], levels = statesX),    # Previous state X(n-1)
+  X_next = factor(X[4:n], levels = statesX)  # Next state X(n+1)
+)
+
+# Normalize to get transition probabilities
+X_transition_probs_third_order <- prop.table(X_transitions_third_order, c(1, 2, 3))
+
+# Log-likelihood for first-order transition matrix
+log_likelihood_first_order <- sum(log(X_transition_probs_first_order[cbind(as.numeric(X[-n]), as.numeric(X[-1]))]))
+
+# Log-likelihood for third-order transition matrix
+log_likelihood_third_order <- sum(log(X_transition_probs_third_order[cbind(
+  as.numeric(X[1:(n-3)]),    # X(n-3)
+  as.numeric(X[2:(n-2)]),    # X(n-2)
+  as.numeric(X[3:(n-1)]),    # X(n-1)
+  as.numeric(X[4:n])         # X(n+1)
+)]))
+
+# AIC and BIC for the first-order model
+n_params_first_order <- length(unique(X)) * length(unique(X))  # Number of parameters in first-order transition matrix
+AIC_first_order <- 2 * n_params_first_order - 2 * log_likelihood_first_order
+BIC_first_order <- log(n) * n_params_first_order - 2 * log_likelihood_first_order
+
+# AIC and BIC for the third-order model
+n_params_third_order <- length(unique(X))^3  # Number of parameters in third-order transition matrix
+AIC_third_order <- 2 * n_params_third_order - 2 * log_likelihood_third_order
+BIC_third_order <- log(n) * n_params_third_order - 2 * log_likelihood_third_order
+
+# Return all results as a list
+  return(list(
+    AIC_first_order = AIC_first_order,
+    AIC_third_order = AIC_third_order,
+    BIC_first_order = BIC_first_order,
+    BIC_third_order = BIC_third_order))
+}
+```
+
+```{r 1}
+# Transition matrix Py1 for Y1
+Py1 <- matrix(c(
+  0.02, 0.14, 0.03, 0.72, 0.09,  # From 'a'
+  0.44, 0.48, 0.03, 0.02, 0.03,  # From 'b'
+  0.26, 0.5, 0.11, 0.05, 0.08,  # From 'c'
+  0.02, 0.03, 0.09, 0.37, 0.49,  # From 'd'
+  0.03, 0.22, 0.62, 0.11, 0.02   # From 'e'
+), nrow = 5, byrow = TRUE)
+
+# Initial random state distribution
+Y1 <- character(n)
+Y1[1] <- sample(statesY, size = 1)
+
+# Simulate the Markov chain
+for (i in 2:n) {
+  current_state <- which(statesY == Y1[i - 1])
+  Y1[i] <- sample(statesY, size = 1, prob = Py1[current_state, ])
+}
+
+# Generate X1 based on Y1
+X1 <- integer(n)
+for (i in 1:n) {
+  X1[i] <- map[[Y1[i]]]()
+}
+
+# Visualizing Transition Heatmaps
+heatmapY(Y1)
+heatmapX(X1, Y1)
+heatmapXk(X1)
+markovtest(X1)
+```
+
+```{r 2}
+# Define transition probabilities for the new Markov chain Y2 using named elements
+transition_rules <- list(
+  "a_a" = c(0.05, 0.05, 0.05, 0.8, 0.05),
+  "a_b" = c(0.05, 0.05, 0.05, 0.05, 0.8),
+  "a_c" = c(0.8, 0.05, 0.05, 0.05, 0.05),
+  "a_d" = c(0.05, 0.05, 0.8, 0.05, 0.05),
+  "a_e" = c(0.05, 0.8, 0.05, 0.05, 0.05),
+  
+  "b_a" = c(0.8, 0.05, 0.05, 0.05, 0.05),
+  "b_b" = c(0.05, 0.8, 0.05, 0.05, 0.05),
+  "b_c" = c(0.05, 0.05, 0.8, 0.05, 0.05),
+  "b_d" = c(0.05, 0.05, 0.05, 0.05, 0.8),
+  "b_e" = c(0.05, 0.05, 0.05, 0.8, 0.05),
+  
+  "c_a" = c(0.05, 0.05, 0.05, 0.05, 0.8),
+  "c_b" = c(0.8, 0.05, 0.05, 0.05, 0.05),
+  "c_c" = c(0.05, 0.8, 0.05, 0.05, 0.05),
+  "c_d" = c(0.05, 0.05, 0.05, 0.8, 0.05),
+  "c_e" = c(0.05, 0.05, 0.8, 0.05, 0.05),
+  
+  "d_a" = c(0.05, 0.8, 0.05, 0.05, 0.05),
+  "d_b" = c(0.05, 0.05, 0.8, 0.05, 0.05),
+  "d_c" = c(0.05, 0.05, 0.05, 0.8, 0.05),
+  "d_d" = c(0.8, 0.05, 0.05, 0.05, 0.05),
+  "d_e" = c(0.05, 0.05, 0.05, 0.05, 0.8),
+  
+  "e_a" = c(0.05, 0.05, 0.8, 0.05, 0.05),
+  "e_b" = c(0.05, 0.05, 0.05, 0.8, 0.05),
+  "e_c" = c(0.05, 0.05, 0.05, 0.05, 0.8),
+  "e_d" = c(0.05, 0.8, 0.05, 0.05, 0.05),
+  "e_e" = c(0.8, 0.05, 0.05, 0.05, 0.05)
+)
+
+
+# Initialize Y2 sequence with random starting states
+Y2 <- character(n)
+Y2[1] <- sample(statesY, size = 1)
+Y2[2] <- sample(statesY, size = 1)
+Y2[3] <- sample(statesY, size = 1)
+
+# Simulate the Markov chain using the defined transition rules
+for (i in 4:n) {
+  # Get the last 3 states (Y2[i-3], Y2[i-2], Y2[i-1])
+  prev_states <- Y2[(i-3):(i-1)]  # This is a vector of length 3
+  
+  # We need to lookup the rule for the transition based on Y2[i-3] and Y2[i-1]
+  transition_key <- paste(prev_states[1], prev_states[3], sep = "_")  # Form key like 'a_a', 'b_c', etc.
+  
+  # Get the transition probabilities based on the key
+  transition_probs <- transition_rules[[transition_key]]
+  
+  # Sample the next state based on the transition probabilities
+  next_state <- sample(statesY, size = 1, prob = transition_probs)
+  
+  # Update Y2 with the new state
+  Y2[i] <- next_state
+}
+
+# Generate X2 based on Y2
+X2 <- integer(n)
+for (i in 1:n) {
+  X2[i] <- map[[Y2[i]]]()
+}
+
+# Visualizing Transition Heatmaps
+heatmapY(Y2)
+heatmapX(X2, Y2)
+heatmapXk(X2)
+markovtest(X2)
+```
+
+```{r 3}
+# Define transition probabilities for the new Markov chain Y3 using named elements
+transition_rules <- list(
+  "a_a" = c(0.025, 0.9, 0.025, 0.025, 0.025),
+  "a_b" = c(0.9, 0.025, 0.025, 0.025, 0.025),
+  "a_c" = c(0.9, 0.025, 0.025, 0.025, 0.025),
+  "a_d" = c(0.025, 0.025, 0.025, 0.025, 0.9),
+  "a_e" = c(0.025, 0.9, 0.025, 0.025, 0.025),
+  
+  "b_a" = c(0.025, 0.025, 0.025, 0.9, 0.025),
+  "b_b" = c(0.9, 0.025, 0.025, 0.025, 0.025),
+  "b_c" = c(0.025, 0.025, 0.9, 0.025, 0.025),
+  "b_d" = c(0.025, 0.025, 0.025, 0.9, 0.025),
+  "b_e" = c(0.025, 0.025, 0.9, 0.025, 0.025),
+  
+  "c_a" = c(0.025, 0.025, 0.025, 0.025, 0.9),
+  "c_b" = c(0.9, 0.025, 0.025, 0.025, 0.025),
+  "c_c" = c(0.025, 0.025, 0.025, 0.025, 0.9),
+  "c_d" = c(0.025, 0.025, 0.025, 0.025, 0.9),
+  "c_e" = c(0.025, 0.025, 0.9, 0.025, 0.025),
+  
+  "d_a" = c(0.025, 0.025, 0.025, 0.9, 0.025),
+  "d_b" = c(0.025, 0.9, 0.025, 0.025, 0.025),
+  "d_c" = c(0.025, 0.9, 0.025, 0.025, 0.025),
+  "d_d" = c(0.025, 0.025, 0.9, 0.025, 0.025),
+  "d_e" = c(0.025, 0.025, 0.9, 0.025, 0.025),
+  
+  "e_a" = c(0.025, 0.025, 0.025, 0.9, 0.025),
+  "e_b" = c(0.025, 0.9, 0.025, 0.025, 0.025),
+  "e_c" = c(0.9, 0.025, 0.025, 0.025, 0.025),
+  "e_d" = c(0.025, 0.025, 0.025, 0.025, 0.9),
+  "e_e" = c(0.025, 0.025, 0.025, 0.9, 0.025)
+)
+
+
+# Initialize Y3 sequence with random starting states
+Y3 <- character(n)
+Y3[1] <- sample(statesY, size = 1)
+Y3[2] <- sample(statesY, size = 1)
+Y3[3] <- sample(statesY, size = 1)
+
+# Simulate the Markov chain using the defined transition rules
+for (i in 4:n) {
+  # Get the last 3 states (Y3[i-3], Y3[i-2], Y3[i-1])
+  prev_states <- Y3[(i-3):(i-1)]  # This is a vector of length 3
+  
+  # We need to lookup the rule for the transition based on Y3[i-3] and Y3[i-1]
+  transition_key <- paste(prev_states[1], prev_states[3], sep = "_")  # Form key like 'a_a', 'b_c', etc.
+  
+  # Get the transition probabilities based on the key
+  transition_probs <- transition_rules[[transition_key]]
+  
+  # Sample the next state based on the transition probabilities
+  next_state <- sample(statesY, size = 1, prob = transition_probs)
+  
+  # Update Y3 with the new state
+  Y3[i] <- next_state
+}
+
+# Generate X3 based on Y3
+X3 <- integer(n)
+for (i in 1:n) {
+  X3[i] <- map[[Y3[i]]]()
+}
+
+# Visualizing Transition Heatmaps
+heatmapY(Y3)
+heatmapX(X3, Y3)
+heatmapXk(X3)
+markovtest(X3)
+```
+
+```{r eta}
+# Creating Eta
+eta <- c(n)
+eta[1] = sample(statesY, 1)
+
+# Creating X 
+X4 <- c(n)
+X4[1] = map[[eta[1]]]()
+
+# Creating Z
+Z <- matrix(ncol = 10, nrow = n-1)
+
+# Generating Z(n-1), Eta(n), X(n) for every n
+for(i in 1:(n-1)) {
+  for (j in 1:10) {
+    favored <- statesY[(j - 1) %% length(statesY) + 1]
+    probabilities <- ifelse(statesY == favored, 0.6, 0.1)
+    Z[i,j] = sample(statesY, size = 1, replace = TRUE, prob = probabilities)
+  }
+  eta[i+1] = Z[i, X4[i]]
+  X4[i+1] = map[[eta[i+1]]]()
+}
+
+# Visualizing Transition Heatmaps
+heatmapY(eta, "𝜂")
+heatmapX(X4, eta)
+```
+
+```{r theta}
+# Alternating Eta and X
+statesTh <- c(statesY, statesX)
+Th <- character(n)
+for(i in 1:n) {
+  if(i %% 2 == 1) {
+    Th[i] <- eta[(i+1)/2]
+  } else {
+    Th[i] <- X4[i/2]
+  }
+}
+
+# Empirical distribution for Theta
+Th_counts <- table(factor(Th, levels = statesTh))
+Th_df <- data.frame(State = names(Th_counts), Count = as.numeric(Th_counts))
+
+# Empirical transition matrix for Theta
+Th_transitions <- table(
+  Th_n = factor(Th[-n], levels = statesTh),        # Current state Th(n)
+  Th_next = factor(Th[-1], levels = statesTh)      # Next state Th(n+1)
+)
+
+# Normalize to get probabilities
+Th_transition_probs <- prop.table(Th_transitions, 1)
+
+# Convert to long format for ggplot2
+Th_transition_df <- as.data.frame(as.table(Th_transition_probs))
+colnames(Th_transition_df) <- c("Th_n", "Th_next", "Probability")
+
+# Plot the heatmap for Th(n) to Th(n+1)
+ggplot(Th_transition_df, aes(x = Th_n, y = Th_next, fill = Probability)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "gray1", high = "gray100", mid = "gray50", midpoint = max(Th_transition_df$Probability) / 2) +
+  theme_minimal() +
+  labs(
+    title = "Empirical Transition Probabilities: 𝜗(n) → 𝜗(n+1)",
+    x = "𝜗(n) (Current State)",
+    y = "𝜗(n+1) (Next State)",
+    fill = "Probability"
+  )
+```
