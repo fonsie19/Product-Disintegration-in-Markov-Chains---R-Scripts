@@ -5,7 +5,6 @@
 3. [Functions and Components](#functions-and-components)
 4. [Usage](#usage)
 5. [Outputs](#outputs)
-6. [Customizations](#customizations)
 
 ---
 
@@ -84,12 +83,5 @@ Ensure the R environment is updated to support R Markdown and required libraries
 ### 2. **Model Statistics**
 
 - AIC and BIC values for Markovianity tests.
-
----
-
-## Customizations
-
-- Modify the transition matrices (`Py#`) to explore different processes.
-- Set different values for the parameters **n** and **k**
 
 ---
