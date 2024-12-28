@@ -68,10 +68,10 @@ Ensure the R environment is updated to support R Markdown and required libraries
 
 ## Usage
 
-1. Open the R Markdown script in RStudio or another R environment.
+1. Open the HTML file for the default output, or the R Markdown script in RStudio or another R environment for a customized output.
 2. Execute each code block sequentially to ensure all functions and variables are loaded.
-3. Customize parameters (e.g., `n` for the number of observations) as needed.
-4. Render the Markdown file for a comprehensive HTML output.
+3. Modify the transition matrices (`Py#`) to explore different processes.
+4. Set different values for the parameters **n** and **k** as needed.
 
 ---
 
