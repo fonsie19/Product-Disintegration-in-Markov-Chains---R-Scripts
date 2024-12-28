@@ -1,9 +1,3 @@
-# README: Markov Product Disintegration
-
-This document describes the R Markdown script "Markov Product Disintegration," which simulates Markov chains, generates empirical transition probabilities, and evaluates the Markovian properties of the chains. The script includes visualizations and statistical tests to study the disintegration of Markov product processes. Below, we provide an overview of the script's structure, key functionalities, and instructions for use.
-
----
-
 ## Table of Contents
 
 1. [Overview](#overview)
